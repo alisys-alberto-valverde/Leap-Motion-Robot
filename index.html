@@ -1,0 +1,116 @@
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    body {
+      margin: 0;
+    }
+    .hidden {
+      visibility: hidden;
+    }
+    #hit {
+      text-align: center;
+      position: relative;
+      font-size: 100px;
+      top: 50%;
+      -webkit-transform: translateY(-50%); /* Safari用 */
+      transform: translateY(-50%);
+    }
+  </style>
+</head>
+<body>
+  <h1 id="hit" class="hidden">Hit!</h1>
+  <script type="text/javascript" src="static/three.min.js"></script>
+  <script type="text/javascript" src="static/leap-0.6.4.min.js"></script>
+  <script type="text/javascript" src="static/leap-plugins-0.1.10.js"></script>
+  <script type="text/javascript" src="static/leap.rigged-hand-0.1.7.min.js"></script>
+  <script>
+    window.onload = () => {
+      open();
+    };
+
+
+    // read gestures
+    let controller = new Leap.Controller;
+
+    controller.on('frame', ({ hands, gestures }) => {
+      handleGestures(gestures);
+      handleHands(hands);
+    })
+
+    controller
+      .use('handHold',   {})
+      .use('handEntry',  {})
+      .use('riggedHand', {
+        'positionScale': 0.5
+      })
+      .connect();
+
+
+    // send to server
+    let webSocket;
+    let send;
+    const uri = 'ws://' + location.host + '/ws';
+
+    const open = () => {
+      webSocket = new WebSocket(uri);
+      webSocket.onopen    = onOpen;
+      webSocket.onmessage = onMessage;
+      webSocket.onclose   = onClose;
+      webSocket.onerror   = onError;
+    };
+
+    const onOpen = event => {
+      console.log('open');
+      unlock();
+    };
+
+    const onMessage = event => {
+      if (!event || !event.data) return;
+      console.log(event.data);
+    };
+
+    const onClose = event => {
+      console.log('close');
+    };
+
+    const onError = event => {
+      console.log('error');
+    };
+
+    let lock = 0;
+    const onHit = () => {
+      let hit = document.getElementById('hit');
+      hit.classList.remove('hidden');
+      webSocket.send('hit');
+      setTimeout(unlock, 3000);
+      lock = 2;
+    };
+
+    const unlock = () => {
+      let hit = document.getElementById('hit');
+      hit.classList.add('hidden');
+      lock = 0;
+    };
+
+    const handleGestures = gestures => {
+      if (!gestures.length) return;
+      if (lock >= 2) return;
+
+      let swipeGestures = gestures.filter(gesture =>
+        (gesture.state == "start" && gesture.type == 'swipe')
+      );
+
+      if (swipeGestures.length) onHit();
+    };
+
+    const handleHands = hands => {
+      if (hands == null || hands.length == 0) return;
+      if (lock >= 1) return;
+      lock = 1;
+
+      webSocket.send('ready');
+    }
+  </script>
+</body>
+</html>
